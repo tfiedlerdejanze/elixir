@@ -170,4 +170,161 @@ defmodule Duration do
       microsecond: {-ms, p}
     }
   end
+
+  @doc """
+  Parses an ISO8601 formatted duration string to a `Duration` struct.
+
+  ## Examples
+
+      iex> Duration.parse("P1Y2M3DT4H5M6S")
+      {:ok, %Duration{year: 1, month: 2, day: 3, hour: 4, minute: 5, second: 6}}
+
+      iex> Duration.parse("PT10H30M")
+      {:ok, %Duration{hour: 10, minute: 30, second: 0}}
+
+  """
+  @spec parse(String.t()) :: {:ok, t} | {:error, String.t()}
+  def parse("P" <> duration_string) do
+    parse(duration_string, %{}, "", false)
+  end
+
+  def parse(_) do
+    {:error, "invalid duration string"}
+  end
+
+  @doc """
+  Same as parse/1 but raises an ArgumentError.
+
+  ## Examples
+
+      iex> Duration.parse!("P1Y2M3DT4H5M6S")
+      %Duration{year: 1, month: 2, day: 3, hour: 4, minute: 5, second: 6}
+
+      iex> Duration.parse!("PT10H30M")
+      %Duration{hour: 10, minute: 30, second: 0}
+
+  """
+  @spec parse!(String.t()) :: t
+  def parse!(duration_string) do
+    case parse(duration_string) do
+      {:ok, duration} ->
+        duration
+
+      {:error, reason} ->
+        raise ArgumentError, "failed to parse duration. reason: #{inspect(reason)}"
+    end
+  end
+
+  defp parse(<<>>, duration, "", _), do: {:ok, new(Enum.into(duration, []))}
+
+  defp parse(<<c::utf8, rest::binary>>, duration, buffer, is_time) when c in ?0..?9 do
+    parse(rest, duration, <<buffer::binary, c::utf8>>, is_time)
+  end
+
+  defp parse(<<"Y", rest::binary>>, duration, buffer, false) do
+    parse(:year, rest, duration, buffer, false)
+  end
+
+  defp parse(<<"M", rest::binary>>, duration, buffer, false) do
+    parse(:month, rest, duration, buffer, false)
+  end
+
+  defp parse(<<"W", rest::binary>>, duration, buffer, false) do
+    parse(:week, rest, duration, buffer, false)
+  end
+
+  defp parse(<<"D", rest::binary>>, duration, buffer, false) do
+    parse(:day, rest, duration, buffer, false)
+  end
+
+  defp parse(<<"T", _::binary>>, _duration, _, true) do
+    {:error, "time delimiter was already provided"}
+  end
+
+  defp parse(<<"T", rest::binary>>, duration, _buffer, false) do
+    parse(rest, duration, "", true)
+  end
+
+  defp parse(<<"H", rest::binary>>, duration, buffer, true) do
+    parse(:hour, rest, duration, buffer, true)
+  end
+
+  defp parse(<<"M", rest::binary>>, duration, buffer, true) do
+    parse(:minute, rest, duration, buffer, true)
+  end
+
+  defp parse(<<"S", rest::binary>>, duration, buffer, true) do
+    parse(:second, rest, duration, buffer, true)
+  end
+
+  defp parse(<<c::utf8, _::binary>>, _, _, _) do
+    {:error, "Unexpected character: #{<<c>>}"}
+  end
+
+  defp parse(unit, string, duration, buffer, is_time) do
+    case Map.get(duration, unit) do
+      nil -> parse(string, Map.put(duration, unit, String.to_integer(buffer)), "", is_time)
+      _ -> {:error, "#{unit} was already provided"}
+    end
+  end
+
+  @doc """
+  Formats a `Duration` struct to an ISO8601 formatted duration string.
+
+  ## Examples
+
+      iex> Duration.format(%Duration{year: 1, month: 2, day: 3, hour: 4, minute: 5, second: 6})
+      "P1Y2M3DT4H5M6S"
+
+      iex> Duration.format(%Duration{hour: 10, minute: 30})
+      "PT10H30M"
+
+      iex> Duration.format(%Duration{year: 1, month: 2, day: 3})
+      "P1Y2M3D"
+  """
+  @spec format(t) :: String.t()
+  def format(duration) do
+    [
+      year: duration.year,
+      month: duration.month,
+      week: duration.week,
+      day: duration.day,
+      hour: duration.hour,
+      minute: duration.minute,
+      second: duration.second
+    ]
+    |> Enum.reject(&(elem(&1, 1) == 0))
+    |> format_components()
+    |> Enum.join()
+  end
+
+  defp format_components(duration) do
+    date_components = format_date_components(duration)
+    time_components = format_time_components(duration)
+
+    case time_components do
+      [] -> ["P"] ++ date_components
+      time_components -> ["P"] ++ date_components ++ ["T"] ++ time_components
+    end
+  end
+
+  defp format_date_components(duration) do
+    for {key, value} <- duration, key in [:year, :month, :week, :day] do
+      "#{value}#{format_unit(key)}"
+    end
+  end
+
+  defp format_time_components(duration) do
+    for {key, value} <- duration, key in [:hour, :minute, :second] do
+      "#{value}#{format_unit(key)}"
+    end
+  end
+
+  defp format_unit(:year), do: "Y"
+  defp format_unit(:month), do: "M"
+  defp format_unit(:week), do: "W"
+  defp format_unit(:day), do: "D"
+  defp format_unit(:hour), do: "H"
+  defp format_unit(:minute), do: "M"
+  defp format_unit(:second), do: "S"
 end
