@@ -1472,7 +1472,10 @@ defmodule Calendar.ISO do
   @impl true
   @spec shift_date(year, month, day, Duration.t()) :: {year, month, day}
   def shift_date(year, month, day, duration) do
-    shift_options = shift_date_options(duration)
+    shift_options = [
+      month: duration.year * 12 + duration.month,
+      day: duration.week * 7 + duration.day
+    ]
 
     Enum.reduce(shift_options, {year, month, day}, fn
       {_, 0}, date ->
@@ -1539,7 +1542,10 @@ defmodule Calendar.ISO do
   @spec shift_time(hour, minute, second, microsecond, Duration.t()) ::
           {hour, minute, second, microsecond}
   def shift_time(hour, minute, second, microsecond, duration) do
-    shift_options = shift_time_options(duration)
+    shift_options = [
+      second: duration.hour * 3600 + duration.minute * 60 + duration.second,
+      microsecond: duration.microsecond
+    ]
 
     Enum.reduce(shift_options, {hour, minute, second, microsecond}, fn
       {_, 0}, time ->
@@ -1620,26 +1626,6 @@ defmodule Calendar.ISO do
     {value, original_precision}
   end
 
-  defp shift_date_options(%Duration{
-         year: year,
-         month: month,
-         week: week,
-         day: day,
-         hour: 0,
-         minute: 0,
-         second: 0,
-         microsecond: {0, 0}
-       }) do
-    [
-      month: year * 12 + month,
-      day: week * 7 + day
-    ]
-  end
-
-  defp shift_date_options(_duration) do
-    raise ArgumentError, "cannot shift date by time units"
-  end
-
   defp shift_datetime_options(%Duration{
          year: year,
          month: month,
@@ -1655,26 +1641,6 @@ defmodule Calendar.ISO do
       second: week * 7 * 86400 + day * 86400 + hour * 3600 + minute * 60 + second,
       microsecond: microsecond
     ]
-  end
-
-  defp shift_time_options(%Duration{
-         year: 0,
-         month: 0,
-         week: 0,
-         day: 0,
-         hour: hour,
-         minute: minute,
-         second: second,
-         microsecond: microsecond
-       }) do
-    [
-      second: hour * 3600 + minute * 60 + second,
-      microsecond: microsecond
-    ]
-  end
-
-  defp shift_time_options(_duration) do
-    raise ArgumentError, "cannot shift time by date units"
   end
 
   ## Helpers
